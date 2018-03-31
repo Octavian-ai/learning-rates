@@ -42,8 +42,8 @@ from ploty import Ploty
 
 class EarlyStopping(session_run_hook.SessionRunHook):
 
-  def __init__(self, model, target=0.99, check_every=100, max_mins=10):
-    self.model = model # yuck
+  def __init__(self, metric, target=0.99, check_every=100, max_mins=10):
+    self.metric = metric
     self.target = target
     self.counter = 0
     self.check_every = check_every
@@ -58,14 +58,14 @@ class EarlyStopping(session_run_hook.SessionRunHook):
 
     if self.should_check:
       try:
-          return session_run_hook.SessionRunArgs(self.model.accuracy)
+          return session_run_hook.SessionRunArgs([metric])
       except:
           pass
 
   def after_run(self, run_context, run_values):
     if self.should_check:
-      acc = run_values.results
-      if acc[1] > self.target:
+      t = run_values.results[0][1]
+      if t > self.target:
         tf.logging.info("Early stopping")
         run_context.request_stop()
         
@@ -185,10 +185,10 @@ class Model(object):
 
 
         # Hooks
-        early_stop = EarlyStopping(self, target=self.val_target, max_mins=self.max_mins)
+        early_stop = EarlyStopping(eval_metric_ops["accuracy"], target=self.val_target, max_mins=self.max_mins)
 
-        train_hooks = [early_stop]
-        eval_hooks = []
+        train_hooks = []
+        eval_hooks = [early_stop]
 
         if self.eval_callback is not None:
           readings = []
@@ -360,7 +360,7 @@ def run(optimizer="Adam", schedule="fixed", lr=0.01, scale=1, max_mins=2, eval_c
 
     m = Model(
       optimizer_fn=get_optimizer, 
-      val_target=0.797, 
+      val_target=0.97, 
       max_mins=max_mins, 
       scale=scale,
       eval_callback=eval_callback)
