@@ -408,7 +408,7 @@ def plt_train_trace(FLAGS):
           return d
 
         r = run(FLAGS, 
-          max_steps=200,
+          max_steps=70,
           optimizer=opt, 
           schedule=sched, 
           lr=lr, 
