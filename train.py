@@ -284,12 +284,12 @@ optimizers = {
 }
 
 ideal_lr = {
-  "Adam": 0.001,
+  "Adam": 0.00146,
   "Adagrad": 0.1,
-  "Momentum": 0.2,
-  "GD": 0.2,
-  "Adadelta": 4,
-  "RMSProp": 0.001,  
+  "Momentum": 0.215,
+  "GD": 0.215,
+  "Adadelta": 3.16,
+  "RMSProp": 0.00146,  
 }
 
 schedules = [
