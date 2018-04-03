@@ -32,77 +32,23 @@ import argparse
 
 import numpy as np
 import tensorflow as tf
-from tensorflow.python.framework import ops
-from tensorflow.python.training import session_run_hook
-from tensorflow.python.training.basic_session_run_hooks import _as_graph_element
-
 
 from ploty import Ploty
-
-
-class EarlyStopping(session_run_hook.SessionRunHook):
-
-  def __init__(self, metric, target=0.99, check_every=100, max_mins=10):
-    self.metric = metric
-    self.target = target
-    self.counter = 0
-    self.check_every = check_every
-    self.max_mins = max_mins
-
-  def after_create_session(self, session, coord):
-    self.start_time = time.time()
-        
-  def before_run(self, run_context):
-    self.counter += 1
-    self.should_check = (self.counter % self.check_every) == 0
-
-    if self.should_check:
-      try:
-          return session_run_hook.SessionRunArgs([metric])
-      except:
-          pass
-
-  def after_run(self, run_context, run_values):
-    if self.should_check:
-      t = run_values.results[0][1]
-      if t > self.target:
-        tf.logging.info("Early stopping")
-        run_context.request_stop()
-        
-    if time.time() - self.start_time > 60*self.max_mins:
-      run_context.request_stop()
-    
-
-
-class CallbackHook(session_run_hook.SessionRunHook):
-  def __init__(self, metrics, callback_after=None, callback_end=None):
-    self.metrics = metrics
-    self.callback_after = callback_after
-    self.callback_end = callback_end
-
-  def before_run(self, run_context):
-    return session_run_hook.SessionRunArgs(self.metrics)
-
-  def after_run(self, run_context, run_values):
-    if self.callback_after is not None:
-      self.callback_after(run_context, run_values)
-
-  def end(self, session):
-    if self.callback_end is not None:
-      self.callback_end(session)
-    
+from hooks import *
 
 
 
 class Model(object):
 
-    def __init__(self, optimizer_fn, val_target=0.99, max_mins=100, scale=1, output_path="/tmp/", eval_callback=None):
+    def __init__(self, optimizer_fn, val_target=0.99, max_mins=100, scale=1, output_path="/tmp/", train_callback=None, eval_callback=None):
         self.optimizer_fn = optimizer_fn
         self.val_target = val_target
         self.max_mins = max_mins
         self.scale = scale
         self.output_path = output_path
+        self.train_callback = train_callback
         self.eval_callback = eval_callback
+        self.start_time = time.time()
 
     def cnn_model_fn(self, features, labels, mode):
         """Model function for CNN."""
@@ -185,20 +131,23 @@ class Model(object):
 
 
         # Hooks
-        early_stop = EarlyStopping(eval_metric_ops["accuracy"], target=self.val_target, max_mins=self.max_mins)
+        early_stop = EarlyStopping(
+          eval_metric_ops["accuracy"], 
+          start_time=self.start_time,
+          target=self.val_target, 
+          check_every=1,
+          max_mins=self.max_mins)
 
-        train_hooks = []
-        eval_hooks = [early_stop]
+        train_hooks = [early_stop]
+        eval_hooks = []
+
+        if self.train_callback is not None:
+          m = MetricHook(eval_metric_ops["accuracy"], self.train_callback)
+          train_hooks.append(m)
 
         if self.eval_callback is not None:
-          readings = []
-          def eval_cb_after(run_context, run_values):
-            readings.append(run_values.results["accuracy"][1])
-          def eval_cb_end(session):
-            self.eval_callback(np.average(readings))
-            readings.clear()
-
-          eval_hooks.append(CallbackHook(eval_metric_ops, eval_cb_after, eval_cb_end))
+          m = MetricHook(eval_metric_ops["accuracy"], self.eval_callback)
+          eval_hooks.append(m)
 
         ### Create EstimatorSpecs ###
 
@@ -230,7 +179,7 @@ class Model(object):
             evaluation_hooks=eval_hooks)
 
 
-    def measure(self, train_steps_total=100, eval_throttle_secs=200):
+    def train_and_evaluate(self, train_steps_total=100, eval_throttle_secs=200):
         
         # Load training and eval data
         mnist = tf.contrib.learn.datasets.load_dataset("mnist")
@@ -270,7 +219,10 @@ class Model(object):
         eval_spec = tf.estimator.EvalSpec(input_fn=eval_input_fn, throttle_secs=eval_throttle_secs)
 
         tf.estimator.train_and_evaluate(mnist_classifier, train_spec, eval_spec)
-        
+
+        test_results = mnist_classifier.evaluate(input_fn=eval_input_fn)
+        print(test_results)
+
         try:
           shutil.rmtree(model_dir)
         except:
@@ -282,7 +234,6 @@ def LRRange(mul=5):
   for i in range(mul*6, 0, -1):
     lr = pow(0.1, i/mul)
     yield lr
-     
 
   for i in range(1, 2*mul+1):
     lr = pow(10, i/mul)
@@ -318,13 +269,10 @@ def lr_schedule(optimizer, starter_learning_rate=0.1,
     cycle = tf.floor(1+global_step/(2*cycle_length))
     x = tf.abs(global_step/cycle_length - 2*cycle + 1)
     lr = starter_learning_rate + (starter_learning_rate-min_lr)*tf.maximum(0, (1-x))/float(2**(cycle-1))
-    
-    
 
 
-tf.logging.set_verbosity(tf.logging.WARN)
+
 output_path = "/tmp/"
-
 
 optimizers = {
     "Adam": tf.train.AdamOptimizer,
@@ -351,7 +299,7 @@ schedules = [
 ]
 
 
-def run(optimizer="Adam", schedule="fixed", lr=0.01, scale=1, max_mins=2, eval_callback=None, eval_throttle_secs=5):
+def run(optimizer="Adam", schedule="fixed", lr=0.01, scale=1, max_mins=2, train_callback=None, eval_callback=None, eval_throttle_secs=5):
 
     opt = optimizers[optimizer]
 
@@ -363,9 +311,10 @@ def run(optimizer="Adam", schedule="fixed", lr=0.01, scale=1, max_mins=2, eval_c
       val_target=0.97, 
       max_mins=max_mins, 
       scale=scale,
+      train_callback=train_callback,
       eval_callback=eval_callback)
 
-    m.measure(eval_throttle_secs=eval_throttle_secs)
+    m.train_and_evaluate(eval_throttle_secs=eval_throttle_secs)
 
 
 def plt_time_to_train(FLAGS):
@@ -377,7 +326,7 @@ def plt_time_to_train(FLAGS):
             print(f"Running {opt} {sched} {lr}")
 
             def cb(r):
-              p.add_result(lr, r["time_taken"], opt + " " + sched)
+              p.add_result(lr, r["time_taken"], opt + " " + sched, data=r)
 
             r = run(opt, sched, lr, scale=FLAGS.scale, max_mins=FLAGS.max_mins, eval_callback=cb)
 
@@ -405,7 +354,7 @@ def plt_time_vs_model_size(FLAGS):
             def cb(r):
               print(r, opt, sched, scale)
               if r["accuracy"] >= 0.96:
-                p.add_result(scale, r["time_taken"], opt + " " + sched)
+                p.add_result(scale, r["time_taken"], opt + " " + sched, data=r)
               else:
                 tf.logging.error("Failed to train.")
 
@@ -443,11 +392,13 @@ def plt_train_trace(FLAGS):
 
         time_start = time.time()
 
-        def cb(acc):
-          taken = time.time() - time_start
-          p.add_result(taken, acc, opt)
+        def cb(mode):
+          def d(acc):
+            taken = time.time() - time_start
+            p.add_result(taken, acc, opt+"-"+mode)
+          return d
 
-        r = run(opt, sched, lr, scale=FLAGS.scale, max_mins=FLAGS.max_mins, eval_callback=cb, eval_throttle_secs=5)
+        r = run(opt, sched, lr, scale=FLAGS.scale, max_mins=FLAGS.max_mins, train_callback=cb("train"), eval_callback=cb("eval"), eval_throttle_secs=5)
         
        
       except Exception:

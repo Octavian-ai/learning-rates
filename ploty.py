@@ -59,7 +59,7 @@ class Ploty(object):
       }
       self.c_i += 1
 
-  def add_result(self, x, y, name, marker="o", line="-"):
+  def add_result(self, x, y, name, marker="o", line="-", data={}):
     self.ensure(name)
     self.datas[name]["x"].append(x)
     self.datas[name]["y"].append(y)
@@ -67,7 +67,7 @@ class Ploty(object):
     self.datas[name]["l"] = line
 
     if self.terminal:
-      print(f'{{"metric": "{name}", "value": {y} }}')
+      print(f'{{"metric": "{name}", "value": {y}, "x": {x} }}')
 
     if self.auto_render:
       self.render()
