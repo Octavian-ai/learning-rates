@@ -11,12 +11,12 @@ import time
 
 class EarlyStopping(session_run_hook.SessionRunHook):
 
-	def __init__(self, metric, start_time, target=0.97, check_every=100, max_mins=10):
+	def __init__(self, metric, start_time, target=0.97, check_every=100, max_secs=10):
 		self.metric = metric
 		self.target = target
 		self.counter = 0
 		self.check_every = check_every
-		self.max_mins = max_mins
+		self.max_secs = max_secs
 		self.start_time = start_time
 		
 	def before_run(self, run_context):
@@ -24,19 +24,19 @@ class EarlyStopping(session_run_hook.SessionRunHook):
 		self.should_check = (self.counter % self.check_every) == 0
 
 		if self.should_check:
-			tf.logging.info("EarlyStopping: Should check")
 			return session_run_hook.SessionRunArgs([self.metric])
 
 	def after_run(self, run_context, run_values):
-		tf.logging.info(f"EarlyStopping after_run {self.counter} {run_values} {self.should_check}")
 		if self.should_check and run_values.results is not None:
-			tf.logging.info(f"EarlyStopping: Got results {run_values.results}")
 			t = run_values.results[0][1]
 			if t > self.target:
 				tf.logging.info("Early stopping")
 				run_context.request_stop()
+
+		tf.logging.info(f"EarlyStopping time {time.time() - self.start_time} > {self.max_secs}")
 			
-		if time.time() - self.start_time > 60*self.max_mins:
+		if (time.time() - self.start_time) > self.max_secs:
+			tf.logging.info("Early stopping")
 			run_context.request_stop()
 		
 

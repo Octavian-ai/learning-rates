@@ -40,10 +40,10 @@ from hooks import *
 
 class Model(object):
 
-    def __init__(self, optimizer_fn, val_target=0.99, max_mins=100, scale=1, output_path="/tmp/", train_callback=None, eval_callback=None):
+    def __init__(self, optimizer_fn, val_target=0.99, max_secs=100, scale=1, output_path="/tmp/", train_callback=None, eval_callback=None):
         self.optimizer_fn = optimizer_fn
         self.val_target = val_target
-        self.max_mins = max_mins
+        self.max_secs = max_secs
         self.scale = scale
         self.output_path = output_path
         self.train_callback = train_callback
@@ -136,9 +136,9 @@ class Model(object):
           start_time=self.start_time,
           target=self.val_target, 
           check_every=1,
-          max_mins=self.max_mins)
+          max_secs=self.max_secs)
 
-        train_hooks = [early_stop]
+        train_hooks = []
         eval_hooks = []
 
         if self.train_callback is not None:
@@ -179,7 +179,7 @@ class Model(object):
             evaluation_hooks=eval_hooks)
 
 
-    def train_and_evaluate(self, train_steps_total=100, eval_throttle_secs=200):
+    def train_and_evaluate(self, max_steps, eval_throttle_secs):
         
         # Load training and eval data
         mnist = tf.contrib.learn.datasets.load_dataset("mnist")
@@ -215,7 +215,7 @@ class Model(object):
 
 
         # Specs for train and eval
-        train_spec = tf.estimator.TrainSpec(input_fn=train_input_fn, max_steps=train_steps_total)
+        train_spec = tf.estimator.TrainSpec(input_fn=train_input_fn, max_steps=max_steps)
         eval_spec = tf.estimator.EvalSpec(input_fn=eval_input_fn, throttle_secs=eval_throttle_secs)
 
         tf.estimator.train_and_evaluate(mnist_classifier, train_spec, eval_spec)
@@ -299,7 +299,16 @@ schedules = [
 ]
 
 
-def run(optimizer="Adam", schedule="fixed", lr=0.01, scale=1, max_mins=2, train_callback=None, eval_callback=None, eval_throttle_secs=5):
+def run(
+  FLAGS,
+  max_steps,
+  optimizer="Adam", 
+  schedule="fixed", 
+  lr=0.01, 
+  scale=1,
+  eval_throttle_secs=10,
+  train_callback=None, 
+  eval_callback=None):
 
     opt = optimizers[optimizer]
 
@@ -309,12 +318,12 @@ def run(optimizer="Adam", schedule="fixed", lr=0.01, scale=1, max_mins=2, train_
     m = Model(
       optimizer_fn=get_optimizer, 
       val_target=0.97, 
-      max_mins=max_mins, 
+      max_secs=FLAGS.max_secs, 
       scale=scale,
       train_callback=train_callback,
       eval_callback=eval_callback)
 
-    m.train_and_evaluate(eval_throttle_secs=eval_throttle_secs)
+    m.train_and_evaluate(max_steps=max_steps, eval_throttle_secs=eval_throttle_secs)
 
 
 def plt_time_to_train(FLAGS):
@@ -328,7 +337,7 @@ def plt_time_to_train(FLAGS):
             def cb(r):
               p.add_result(lr, r["time_taken"], opt + " " + sched, data=r)
 
-            r = run(opt, sched, lr, scale=FLAGS.scale, max_mins=FLAGS.max_mins, eval_callback=cb)
+            r = run(opt, sched, lr, scale=FLAGS.scale, max_secs=FLAGS.max_secs, eval_callback=cb)
 
           except Exception:
             traceback.print_exc()
@@ -358,7 +367,7 @@ def plt_time_vs_model_size(FLAGS):
               else:
                 tf.logging.error("Failed to train.")
 
-            r = run(opt, sched, ideal_lr[opt], scale=scale, max_mins=FLAGS.max_mins, eval_callback=cb)        
+            r = run(opt, sched, ideal_lr[opt], scale=scale, max_secs=FLAGS.max_secs, eval_callback=cb)        
 
           except Exception:
             traceback.print_exc()
@@ -398,7 +407,15 @@ def plt_train_trace(FLAGS):
             p.add_result(taken, acc, opt+"-"+mode)
           return d
 
-        r = run(opt, sched, lr, scale=FLAGS.scale, max_mins=FLAGS.max_mins, train_callback=cb("train"), eval_callback=cb("eval"), eval_throttle_secs=5)
+        r = run(FLAGS, 
+          max_steps=200,
+          optimizer=opt, 
+          schedule=sched, 
+          lr=lr, 
+          scale=FLAGS.scale, 
+          train_callback=cb("train"), 
+          eval_callback=cb("eval"),
+          eval_throttle_secs=3)
         
        
       except Exception:
@@ -410,18 +427,22 @@ if __name__ == "__main__":
 
   tf.logging.set_verbosity('INFO')
 
+  tasks = {
+    "trace": plt_train_trace,
+    "time_train": plt_time_to_train,
+    "size": plt_time_vs_model_size
+  }
+
   parser = argparse.ArgumentParser()
-  parser.add_argument('--max-mins', type=float, default=2)
-  parser.add_argument('--scale', type=int, default=3)
-  parser.add_argument('--oversample', type=int, default=4)
-  parser.add_argument('--output-dir', type=str, default="./output")
+  parser.add_argument('--max-secs',               type=float, default=120)
+  parser.add_argument('--scale',                  type=int, default=3)
+  parser.add_argument('--oversample',             type=int, default=4)
+  parser.add_argument('--task',                   type=str, choices=tasks.keys())
+  parser.add_argument('--output-dir',             type=str, default="./output")
 
   FLAGS = parser.parse_args()
 
-
   tf.logging.info("starting...")
-
-  # plt_time_to_train(FLAGS)
-  # plt_time_vs_model_size(FLAGS)
-  plt_train_trace(FLAGS)
+  tasks[FLAGS.task](FLAGS)
+  
 
