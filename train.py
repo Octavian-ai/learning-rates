@@ -267,6 +267,41 @@ class Model(object):
 
 			return r
 
+
+
+
+### Static data ###
+
+output_path = "/tmp/"
+
+optimizers = {
+		"Adam": tf.train.AdamOptimizer,
+		"Adagrad": tf.train.AdagradOptimizer,
+		"Momentum": lambda lr: tf.train.MomentumOptimizer(lr, 0.5),
+		"GD": tf.train.GradientDescentOptimizer,
+		"Adadelta": tf.train.AdadeltaOptimizer,
+		"RMSProp": tf.train.RMSPropOptimizer,	
+}
+
+ideal_lr = {
+	"Adam": 0.00146,
+	"Adagrad": 0.1,
+	"Momentum": 0.215,
+	"GD": 0.215,
+	"Adadelta": 3.16,
+	"RMSProp": 0.00146,	
+}
+
+schedules = [
+#	 "exp_decay", 
+	"fixed", 
+#	 "cosine_restart"
+]
+
+
+
+
+### Learning rates ###
 			
 def LRRange(mul=5):
 	
@@ -276,6 +311,15 @@ def LRRange(mul=5):
 
 	for i in range(1, 2*mul+1):
 		lr = pow(10, i/mul)
+		yield lr
+
+
+def LRRangeAdam():
+
+	yield ideal_lr["Adam"]
+	
+	for i in range(1, 4):
+		lr = pow(0.1, i)
 		yield lr
 		
 		
@@ -311,31 +355,6 @@ def lr_schedule(optimizer, starter_learning_rate=0.1,
 
 
 
-output_path = "/tmp/"
-
-optimizers = {
-		"Adam": tf.train.AdamOptimizer,
-		"Adagrad": tf.train.AdagradOptimizer,
-		"Momentum": lambda lr: tf.train.MomentumOptimizer(lr, 0.5),
-		"GD": tf.train.GradientDescentOptimizer,
-		"Adadelta": tf.train.AdadeltaOptimizer,
-		"RMSProp": tf.train.RMSPropOptimizer,	
-}
-
-ideal_lr = {
-	"Adam": 0.00146,
-	"Adagrad": 0.1,
-	"Momentum": 0.215,
-	"GD": 0.215,
-	"Adadelta": 3.16,
-	"RMSProp": 0.00146,	
-}
-
-schedules = [
-#	 "exp_decay", 
-	"fixed", 
-#	 "cosine_restart"
-]
 
 
 def build_model(
@@ -347,7 +366,8 @@ def build_model(
 	scale=1,
 	train_callback=None, 
 	eval_callback=None,
-	train_end_callback=None):
+	train_end_callback=None,
+	stop_after_acc=0.97):
 
 		print(f"Starting run {optimizer}({lr}) scale={scale}")
 
@@ -358,7 +378,7 @@ def build_model(
 
 		m = Model(
 			optimizer_fn=get_optimizer, 
-			val_target=0.97, 
+			val_target=stop_after_acc, 
 			max_secs=max_secs, 
 			scale=scale,
 			train_callback=train_callback,
@@ -395,35 +415,40 @@ def plt_time_vs_lr(FLAGS):
 def plt_time_vs_model_size(FLAGS):
 
 		oversample = FLAGS.oversample
+
+		stop_after_acc = 0.01
 		
 		p = Ploty(output_path=FLAGS.output_dir,title="Time to train vs size of model",x="Model scale",clear_screen=True)
 		for opt in optimizers.keys():
 			for sched in schedules:
-				for i in range(1*oversample, 10*oversample):
-					scale = i/oversample
-					try:
-						time_start = time.time()
+				for lr in LRRangeAdam():
+					for i in range(1*oversample, 10*oversample):
+						scale = i/oversample
 
-						def cb(acc):
-							taken = time.time() - time_start
-							if acc >= 0.96:
-								p.add_result(scale, taken, opt, data={"acc":acc})
-							else:
-								tf.logging.error("Failed to train.")
+						try:
+							time_start = time.time()
 
-						build_model(
-							FLAGS,
-							max_secs=60*4,
-							optimizer=opt, 
-							schedule=sched, 
-							lr=ideal_lr[opt], 
-							scale=scale,
-							train_end_callback=cb
-						).train()
+							def cb(acc):
+								taken = time.time() - time_start
+								if acc >= stop_after_acc:
+									p.add_result(scale, taken, opt+"("+str(lr)+")", extra_data={"acc":acc, "lr": lr, "opt": opt})
+								else:
+									tf.logging.error("Failed to train.")
 
-					except Exception:
-						traceback.print_exc()
-						pass
+							build_model(
+								FLAGS,
+								max_secs=60*4,
+								optimizer=opt, 
+								schedule=sched, 
+								lr=lr, 
+								scale=scale,
+								train_end_callback=cb,
+								stop_after_acc=stop_after_acc
+							).train()
+
+						except Exception:
+							traceback.print_exc()
+							pass
 					
 			try:
 				p.copy_to_drive()	

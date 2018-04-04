@@ -48,7 +48,7 @@ class Ploty(object):
       self.ax.set_yscale('log')
     
     
-  def ensure(self, name):
+  def ensure(self, name, extra_data):
     if name not in self.datas:
       self.datas[name] = {
         "c": self.cmap(self.c_i),
@@ -57,14 +57,23 @@ class Ploty(object):
         "m": ".",
         "l": '-'
       }
+
+      for i in extra_data.keys():
+        self.datas[name][i] = []
+
+      print("ensure", name, extra_data, self.datas)
+
       self.c_i += 1
 
-  def add_result(self, x, y, name, marker="o", line="-", data={}):
-    self.ensure(name)
+  def add_result(self, x, y, name, marker="o", line="-", extra_data={}):
+    self.ensure(name, extra_data)
     self.datas[name]["x"].append(x)
     self.datas[name]["y"].append(y)
     self.datas[name]["m"] = marker
     self.datas[name]["l"] = line
+
+    for key, value in extra_data.items():
+      self.datas[name][key].append(value)
 
     if self.terminal:
       print(f'{{"metric": "{name}", "value": {y}, "x": {x} }}')
@@ -127,8 +136,9 @@ class Ploty(object):
       writer = csv.writer(csvfile)
       
       for k, d in self.datas.items():
-        for i in zip(d['x'], d['y']):
-          writer.writerow([i[0], i[1], k])
+        for i in zip(*d.values()):
+          writer.writerow(list(i) + [k])
+
       tf.logging.info("Saved CSV: " + csv_name)
     
   
