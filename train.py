@@ -308,7 +308,8 @@ def run(
   scale=1,
   eval_throttle_secs=10,
   train_callback=None, 
-  eval_callback=None):
+  eval_callback=None,
+  end_callback=None):
 
     opt = optimizers[optimizer]
 
@@ -360,14 +361,26 @@ def plt_time_vs_model_size(FLAGS):
           scale = i/oversample
           try:
 
+            time_start = time.time()
+
             def cb(r):
-              print(r, opt, sched, scale)
+              taken = time.time() - time_start
+              print(r, opt, sched, scale, taken)
               if r["accuracy"] >= 0.96:
-                p.add_result(scale, r["time_taken"], opt + " " + sched, data=r)
+                p.add_result(scale, taken, opt)
               else:
                 tf.logging.error("Failed to train.")
 
-            r = run(opt, sched, ideal_lr[opt], scale=scale, max_secs=FLAGS.max_secs, eval_callback=cb)        
+            r = run(
+              FLAGS,
+              max_steps=70,
+              optimizer=opt, 
+              schedule=sched, 
+              lr=ideal_lr[opt], 
+              scale=scale, 
+              eval_throttle_secs=9999999,
+              eval_callback=cb
+            )        
 
           except Exception:
             traceback.print_exc()
