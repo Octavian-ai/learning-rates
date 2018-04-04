@@ -60,9 +60,7 @@ class Ploty(object):
 
       for i in extra_data.keys():
         self.datas[name][i] = []
-
-      print("ensure", name, extra_data, self.datas)
-
+      
       self.c_i += 1
 
   def add_result(self, x, y, name, marker="o", line="-", extra_data={}):
