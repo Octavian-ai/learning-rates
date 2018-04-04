@@ -30,25 +30,24 @@ class EarlyStopping(session_run_hook.SessionRunHook):
 		if self.should_check and run_values.results is not None:
 			t = run_values.results[0][1]
 			if t > self.target:
-				tf.logging.info("Early stopping")
+				tf.logging.info(f"Early stopping as exceeded target {t} > {self.target}")
 				run_context.request_stop()
 
-		tf.logging.info(f"EarlyStopping time {time.time() - self.start_time} > {self.max_secs}")
-			
 		if (time.time() - self.start_time) > self.max_secs:
-			tf.logging.info("Early stopping")
+			tf.logging.info(f"EarlyStopping as time run out {time.time() - self.start_time} > {self.max_secs}")
 			run_context.request_stop()
 		
 
 
 class CallbackHook(session_run_hook.SessionRunHook):
-	def __init__(self, metrics, callback_after=None, callback_end=None):
+	def __init__(self, metrics=None, callback_after=None, callback_end=None):
 		self.metrics = metrics
 		self.callback_after = callback_after
 		self.callback_end = callback_end
 
 	def before_run(self, run_context):
-		return session_run_hook.SessionRunArgs(self.metrics)
+		if self.metrics is not None:
+			return session_run_hook.SessionRunArgs(self.metrics)
 
 	def after_run(self, run_context, run_values):
 		if self.callback_after is not None:
@@ -57,6 +56,23 @@ class CallbackHook(session_run_hook.SessionRunHook):
 	def end(self, session):
 		if self.callback_end is not None:
 			self.callback_end(session)
+
+
+
+class LastMetricHook(session_run_hook.SessionRunHook):
+	def __init__(self, metric, cb):
+		self.metric = metric
+		self.cb = cb
+		self.reading = None
+
+	def before_run(self, run_context):
+		return session_run_hook.SessionRunArgs([self.metric])
+
+	def after_run(self, run_context, run_values):
+		self.reading = run_values.results[0][1]
+
+	def end(self, session):
+		self.cb(self.reading)
 
 
 class MetricHook(session_run_hook.SessionRunHook):

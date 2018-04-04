@@ -3,6 +3,7 @@
 
 data
 output
+analysis
 MNIST-data
 __pycache__
 

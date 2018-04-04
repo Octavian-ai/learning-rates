@@ -18,7 +18,7 @@ except:
 
 class Ploty(object):
 
-  def __init__(self, output_path, title='', x='', y="Time to training complete", legend=False, log_y=False, log_x=False, clear_screen=True, terminal=True, auto_render=True):
+  def __init__(self, output_path, title='', x='', y="Time to training complete", legend=True, log_y=False, log_x=False, clear_screen=True, terminal=True, auto_render=True):
     self.output_path = output_path
     self.title = title
     self.label_x = x
