@@ -29,10 +29,8 @@ class Ploty(object):
     self.legend = legend
     self.terminal = terminal
     self.auto_render = auto_render
-    
-    self.x = []
-    self.y = []
-    self.c = []
+
+    self.header = ["x", "y", "label"]
     self.datas = {}
     
     self.c_i = 0
@@ -60,9 +58,12 @@ class Ploty(object):
 
       for i in extra_data.keys():
         self.datas[name][i] = []
-      
+        if i not in self.header:
+          self.header.append(i)
+
       self.c_i += 1
 
+  # This method assumes extra_data will have the same keys every single call, otherwise csv writing will crash
   def add_result(self, x, y, name, marker="o", line="-", extra_data={}):
     self.ensure(name, extra_data)
     self.datas[name]["x"].append(x)
@@ -132,10 +133,14 @@ class Ploty(object):
     
     with open(csv_name, 'w') as csvfile:
       writer = csv.writer(csvfile)
+      writer.writerow(self.header)
       
       for k, d in self.datas.items():
-        for i in zip(*d.values()):
-          writer.writerow(list(i) + [k])
+        for i in range(len(d["x"])):
+          row = [
+            k if h == "label" else d[h][i] for h in self.header
+          ]
+          writer.writerow(row)
 
       tf.logging.info("Saved CSV: " + csv_name)
     

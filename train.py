@@ -40,7 +40,12 @@ from hooks import *
 
 class Model(object):
 
-		def __init__(self, optimizer_fn=None, val_target=0.99, max_secs=100, scale=1, output_path="/tmp/", 
+		def __init__(self, 
+			optimizer_fn=None, 
+			val_target=0.99, 
+			max_secs=100, 
+			scale=1, 
+			output_path="/tmp/", 
 			train_callback=None,
 			eval_callback=None, 
 			train_end_callback=None,
@@ -315,10 +320,8 @@ def LRRange(mul=5):
 
 
 def LRRangeAdam():
-
 	yield ideal_lr["Adam"]
-	
-	for i in range(1, 4):
+	for i in range(1, 5):
 		lr = pow(0.1, i)
 		yield lr
 		
@@ -416,26 +419,27 @@ def plt_time_vs_model_size(FLAGS):
 
 		oversample = FLAGS.oversample
 
-		stop_after_acc = 0.01
+		stop_after_acc = 0.96
 		
 		p = Ploty(output_path=FLAGS.output_dir,title="Time to train vs size of model",x="Model scale",clear_screen=True)
-		for opt in optimizers.keys():
+		for opt in ["Adam"]:
 			for sched in schedules:
 				for lr in LRRangeAdam():
 					for i in range(1*oversample, 10*oversample):
 						scale = i/oversample
 
 						try:
-							time_start = time.time()
 
+							d = {}
+							
 							def cb(acc):
-								taken = time.time() - time_start
+								taken = time.time() - d["time_start"]
 								if acc >= stop_after_acc:
-									p.add_result(scale, taken, opt+"("+str(lr)+")", extra_data={"acc":acc, "lr": lr, "opt": opt})
+									p.add_result(scale, taken, opt+"("+str(lr)+")", extra_data={"acc":acc, "lr": lr, "opt": opt, "scale":scale, "time":taken})
 								else:
 									tf.logging.error("Failed to train.")
 
-							build_model(
+							m = build_model(
 								FLAGS,
 								max_secs=60*4,
 								optimizer=opt, 
@@ -444,7 +448,10 @@ def plt_time_vs_model_size(FLAGS):
 								scale=scale,
 								train_end_callback=cb,
 								stop_after_acc=stop_after_acc
-							).train()
+							)
+
+							d["time_start"] = time.time()
+							m.train()
 
 						except Exception:
 							traceback.print_exc()
@@ -513,15 +520,14 @@ if __name__ == "__main__":
 	}
 
 	parser = argparse.ArgumentParser()
-	parser.add_argument('--max-secs',							 type=float, default=120)
-	parser.add_argument('--scale',									type=int, default=3)
-	parser.add_argument('--oversample',						 type=int, default=4)
-	parser.add_argument('--task',									 type=str, choices=tasks.keys(),required=True)
-	parser.add_argument('--output-dir',						 type=str, default="./output")
+	parser.add_argument('--max-secs',				type=float, default=120)
+	parser.add_argument('--scale',					type=int, default=3)
+	parser.add_argument('--oversample',			type=int, default=4)
+	parser.add_argument('--task',						type=str, choices=tasks.keys(),required=True)
+	parser.add_argument('--output-dir',			type=str, default="./output")
 
 	FLAGS = parser.parse_args()
 
 	tf.logging.info("starting...")
 	tasks[FLAGS.task](FLAGS)
-	
 
