@@ -144,7 +144,7 @@ class Model(object):
 				# Densely connected layer with 1024 neurons
 				# Input Tensor Shape: [batch_size, 7 * 7 * 64]
 				# Output Tensor Shape: [batch_size, 1024]
-				dense = tf.layers.dense(inputs=pool2_flat, units=round(1024*self.scale), activation=tf.nn.relu)
+				dense = tf.layers.dense(inputs=pool2_flat, units=1024, activation=tf.nn.relu)
 
 				# Add dropout operation; 0.6 probability that element will be kept
 				dropout = tf.layers.dropout(
@@ -288,6 +288,7 @@ optimizers = {
 		"RMSProp": tf.train.RMSPropOptimizer,	
 }
 
+# The best learning rates our grid search identified
 ideal_lr = {
 	"Adam": 0.00146,
 	"Adagrad": 0.1,
@@ -307,7 +308,8 @@ schedules = [
 
 
 ### Learning rates ###
-			
+		
+# A logarithmic grid search of learning rates	
 def LRRange(mul=5):
 	
 	for i in range(mul*6, 0, -1):
@@ -320,7 +322,9 @@ def LRRange(mul=5):
 
 
 def LRRangeAdam():
+	
 	yield ideal_lr["Adam"]
+
 	for i in range(1, 5):
 		lr = pow(0.1, i)
 		yield lr
@@ -419,43 +423,67 @@ def plt_time_vs_model_size(FLAGS):
 
 		oversample = FLAGS.oversample
 
-		stop_after_acc = 0.96
-		
+		stop_after_acc = 0.096
+
+		# Warm up the caches - throw this result away
+		try:
+			m = build_model(
+				FLAGS,
+				max_secs=60*4,
+				optimizer="Adam", 
+				schedule="fixed", 
+				lr=0.001, 
+				scale=0.4,
+				stop_after_acc=stop_after_acc
+			)
+			m.train()
+		except:
+			pass
+
+
+		control = {}
+
+		# Perform real experiment
 		p = Ploty(output_path=FLAGS.output_dir,title="Time to train vs size of model",x="Model scale",clear_screen=True)
 		for opt in ["Adam"]:
 			for sched in schedules:
 				for lr in LRRangeAdam():
+
+					control['give_up_on_scale'] = False
+
 					for i in range(1*oversample, 10*oversample):
 						scale = i/oversample
 
-						try:
+						if not control['give_up_on_scale']:
+							try:
+								# Hack for variable scopes
+								d = {}
 
-							d = {}
-							
-							def cb(acc):
-								taken = time.time() - d["time_start"]
-								if acc >= stop_after_acc:
-									p.add_result(scale, taken, opt+"("+str(lr)+")", extra_data={"acc":acc, "lr": lr, "opt": opt, "scale":scale, "time":taken})
-								else:
-									tf.logging.error("Failed to train.")
+								def cb(acc):
+									taken = time.time() - d["time_start"]
+									if acc >= stop_after_acc:
+										p.add_result(scale, taken, opt+"("+str(lr)+")", extra_data={"acc":acc, "lr": lr, "opt": opt, "scale":scale, "time":taken})
+									else:
+										tf.logging.error("Failed to train.")
+										control['give_up_on_scale'] = True
 
-							m = build_model(
-								FLAGS,
-								max_secs=60*4,
-								optimizer=opt, 
-								schedule=sched, 
-								lr=lr, 
-								scale=scale,
-								train_end_callback=cb,
-								stop_after_acc=stop_after_acc
-							)
+								m = build_model(
+									FLAGS,
+									max_secs=60*4,
+									optimizer=opt, 
+									schedule=sched, 
+									lr=lr, 
+									scale=scale,
+									train_end_callback=cb,
+									stop_after_acc=stop_after_acc
+								)
 
-							d["time_start"] = time.time()
-							m.train()
+								d["time_start"] = time.time()
+								m.train()
 
-						except Exception:
-							traceback.print_exc()
-							pass
+							except Exception:
+								traceback.print_exc()
+								pass
 					
 			try:
 				p.copy_to_drive()	

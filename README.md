@@ -12,3 +12,9 @@ The results show that:
 - Training time vs learning rate exhibits a “valley” shape with the fastest training occuring in a narrow band of learning rates
 - Each optimizer has a different optimal learning rate
 - No one learning rate will successfully train across all optimizers tested
+
+[Read the full article](https://medium.com/octavian-ai)
+[See the code on GitHub](https://github.com/Octavian-ai/learning-rates)
+[Run the code on FloydHub](https://www.floydhub.com/davidmack/projects/learning-rates/)
+[Octavian.ai](https://octavian.ai)
+
