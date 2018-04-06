@@ -396,55 +396,71 @@ def build_model(
 		return m
 
 
+def prewarm(FLAGS):
+	# Warm up the system caches - throw this result away
+	# If we don't do this the first result is falsely slower
+	m = build_model(
+		FLAGS,
+		max_secs=60*4,
+		optimizer="Adam", 
+		schedule="fixed", 
+		lr=0.001, 
+		scale=0.4,
+		stop_after_acc=0.1
+	)
+	m.train()
+
 def plt_time_vs_lr(FLAGS):
-		p = Ploty(output_path=FLAGS.output_dir, title="Time to train vs learning rate", x="Learning rate",log_x=True, log_y=True)
-		for opt in optimizers.keys():
-			for sched in schedules:
-				for lr in LRRange(6):
-					try:
-						print(f"Running {opt} {sched} {lr}")
 
-						def cb(r):
-							p.add_result(lr, r["time_taken"], opt + " " + sched, data=r)
+	prewarm(FLAGS)
+	scale = FLAGS.scale
 
-						r = run(opt, sched, lr, scale=FLAGS.scale, max_secs=FLAGS.max_secs, eval_callback=cb)
+	p = Ploty(output_path=FLAGS.output_dir, title="Time to train vs learning rate", x="Learning rate",log_x=True, log_y=True)
 
-					except Exception:
-						traceback.print_exc()
-						pass
+	for opt in optimizers.keys():
+		for sched in schedules:
+			for lr in LRRange(6):
+				try:
+					# Hack for variable scopes
+					d = {}
 
-			try:
-				p.copy_to_drive()	
-			except Exception:
-				tf.logging.error(e)
-				pass
+					def cb(acc):
+						taken = time.time() - d["time_start"]
+						print("Finished!", acc, taken)
+						if acc >= FLAGS.stop_after_acc:
+							p.add_result(lr, taken, opt, extra_data={"acc":acc, "lr": lr, "opt": opt, "scale":scale, "time":taken, "schedule": sched})
+						else:
+							tf.logging.error("Failed to train.")
+
+					m = build_model(
+						FLAGS,
+						max_secs=60*4,
+						optimizer=opt, 
+						schedule=sched, 
+						lr=lr, 
+						scale=scale,
+						train_end_callback=cb,
+						stop_after_acc=FLAGS.stop_after_acc
+					)
+
+					d["time_start"] = time.time()
+					m.train()
+
+				except Exception:
+					traceback.print_exc()
+					pass
+
+		
 
 def plt_time_vs_model_size(FLAGS):
 
 		oversample = FLAGS.oversample
-
-		stop_after_acc = 0.096
-
-		# Warm up the caches - throw this result away
-		try:
-			m = build_model(
-				FLAGS,
-				max_secs=60*4,
-				optimizer="Adam", 
-				schedule="fixed", 
-				lr=0.001, 
-				scale=0.4,
-				stop_after_acc=stop_after_acc
-			)
-			m.train()
-		except:
-			pass
-
-
+		stop_after_acc = 0.96
+		prewarm(FLAGS)
 		control = {}
 
 		# Perform real experiment
-		p = Ploty(output_path=FLAGS.output_dir,title="Time to train vs size of model",x="Model scale",clear_screen=True)
+		p = Ploty(output_path=FLAGS.output_dir, title="Time to train vs size of model", x="Model scale", clear_screen=True)
 		for opt in ["Adam"]:
 			for sched in schedules:
 				for lr in LRRangeAdam():
@@ -461,7 +477,7 @@ def plt_time_vs_model_size(FLAGS):
 
 								def cb(acc):
 									taken = time.time() - d["time_start"]
-									if acc >= stop_after_acc:
+									if acc >= FLAGS.stop_after_acc:
 										p.add_result(scale, taken, opt+"("+str(lr)+")", extra_data={"acc":acc, "lr": lr, "opt": opt, "scale":scale, "time":taken})
 									else:
 										tf.logging.error("Failed to train.")
@@ -475,7 +491,7 @@ def plt_time_vs_model_size(FLAGS):
 									lr=lr, 
 									scale=scale,
 									train_end_callback=cb,
-									stop_after_acc=stop_after_acc
+									stop_after_acc=FLAGS.stop_after_acc
 								)
 
 								d["time_start"] = time.time()
@@ -485,11 +501,6 @@ def plt_time_vs_model_size(FLAGS):
 								traceback.print_exc()
 								pass
 					
-			try:
-				p.copy_to_drive()	
-			except:
-				pass
-
 
 
 def plt_train_trace(FLAGS):
@@ -548,10 +559,11 @@ if __name__ == "__main__":
 	}
 
 	parser = argparse.ArgumentParser()
-	parser.add_argument('--max-secs',				type=float, default=120)
-	parser.add_argument('--scale',					type=int, default=3)
+	parser.add_argument('--max-secs',			type=float, default=120)
+	parser.add_argument('--stop-after-acc',		type=float, default=0.96)
+	parser.add_argument('--scale',				type=int, default=3)
 	parser.add_argument('--oversample',			type=int, default=4)
-	parser.add_argument('--task',						type=str, choices=tasks.keys(),required=True)
+	parser.add_argument('--task',				type=str, choices=tasks.keys(),required=True)
 	parser.add_argument('--output-dir',			type=str, default="./output")
 
 	FLAGS = parser.parse_args()
