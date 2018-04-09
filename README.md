@@ -13,8 +13,10 @@ The results show that:
 - Each optimizer has a different optimal learning rate
 - No one learning rate will successfully train across all optimizers tested
 
-[Read the full article](https://medium.com/octavian-ai/which-optimizer-and-learning-rate-should-i-use-for-deep-learning-5acb418f9b2)
-[See the code on GitHub](https://github.com/Octavian-ai/learning-rates)
-[Run the code on FloydHub](https://www.floydhub.com/davidmack/projects/learning-rates/)
-[Octavian.ai](https://octavian.ai)
+
+### Read more
+- [Read the full article](https://medium.com/octavian-ai/which-optimizer-and-learning-rate-should-i-use-for-deep-learning-5acb418f9b2)
+- [See the code on GitHub](https://github.com/Octavian-ai/learning-rates)
+- [Run the code on FloydHub](https://www.floydhub.com/davidmack/projects/learning-rates/)
+- [Octavian.ai](https://octavian.ai)
 
