@@ -322,9 +322,6 @@ def LRRange(mul=5):
 
 
 def LRRangeAdam():
-
-	yield 0.0005
-	yield 0.005
 	
 	yield ideal_lr["Adam"]
 
@@ -460,50 +457,44 @@ def plt_time_vs_model_size(FLAGS):
 		oversample = FLAGS.oversample
 		stop_after_acc = 0.96
 		prewarm(FLAGS)
-		control = {}
 
 		# Perform real experiment
 		p = Ploty(output_path=FLAGS.output_dir, title="Time to train vs size of model", x="Model scale", clear_screen=True)
 		for opt in ["Adam"]:
 			for sched in schedules:
 				for lr in LRRangeAdam():
-
-					control['give_up_on_scale'] = False
-
 					for i in range(1*oversample, 10*oversample):
 						scale = i/oversample
 
-						if not control['give_up_on_scale']:
-							try:
-								# Hack for variable scopes
-								d = {}
+						try:
+							# Hack for variable scopes
+							d = {}
 
-								def cb(acc):
-									taken = time.time() - d["time_start"]
-									if acc >= FLAGS.stop_after_acc:
-										p.add_result(scale, taken, opt+"("+str(lr)+")", extra_data={"acc":acc, "lr": lr, "opt": opt, "scale":scale, "time":taken})
-									else:
-										tf.logging.error("Failed to train.")
-										control['give_up_on_scale'] = True
+							def cb(acc):
+								taken = time.time() - d["time_start"]
+								if acc >= FLAGS.stop_after_acc:
+									p.add_result(scale, taken, opt+"("+str(lr)+")", extra_data={"acc":acc, "lr": lr, "opt": opt, "scale":scale, "time":taken})
+								else:
+									tf.logging.error("Failed to train.")
 
-								m = build_model(
-									FLAGS,
-									max_secs=60*4,
-									optimizer=opt, 
-									schedule=sched, 
-									lr=lr, 
-									scale=scale,
-									train_end_callback=cb,
-									stop_after_acc=FLAGS.stop_after_acc
-								)
+							m = build_model(
+								FLAGS,
+								max_secs=60*4,
+								optimizer=opt, 
+								schedule=sched, 
+								lr=lr, 
+								scale=scale,
+								train_end_callback=cb,
+								stop_after_acc=FLAGS.stop_after_acc
+							)
 
-								d["time_start"] = time.time()
-								m.train()
+							d["time_start"] = time.time()
+							m.train()
 
-							except Exception:
-								traceback.print_exc()
-								pass
-					
+						except Exception:
+							traceback.print_exc()
+							pass
+				
 
 
 def plt_train_trace(FLAGS):
