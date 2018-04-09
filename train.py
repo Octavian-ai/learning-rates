@@ -322,6 +322,9 @@ def LRRange(mul=5):
 
 
 def LRRangeAdam():
+
+	yield 0.0005
+	yield 0.005
 	
 	yield ideal_lr["Adam"]
 
